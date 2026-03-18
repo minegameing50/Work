@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0,viewport-fit=cover">
-  <link rel="icon" type="image/png" href="icon.png">
+<link rel="icon" type="image/png" href="icon.png">
 <title>Work App</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;}
@@ -553,48 +553,59 @@ function saveImage(id){
 
   cv.toBlob(function(blob){
     if(!blob){toast('\u274c Could not build image','#dc2626');return;}
+    tryDownload(blob,filename,cv);
+  },'image/png');
+}
 
-    /* METHOD 1: Web Share API with File
-       Works in WebIntoApp / Android WebView — opens native share sheet */
-    try{
-      if(navigator.share && navigator.canShare){
-        var file=new File([blob],filename,{type:'image/png'});
-        if(navigator.canShare({files:[file]})){
-          navigator.share({files:[file],title:'Work Note \u2014 '+n.title})
-            .then(function(){toast('\u2705 Image shared!','#059669');})
-            .catch(function(err){
-              if(err && err.name==='AbortError') return;
-              showImgPreview(cv.toDataURL('image/png'),filename);
-            });
-          return;
-        }
-      }
-    }catch(e){}
+function tryDownload(blob,filename,cv){
+  var dataUrl=cv?cv.toDataURL('image/png'):null;
 
-    /* METHOD 2: navigator.share without file (older WebView) */
-    try{
-      if(navigator.share){
-        var du=cv.toDataURL('image/png');
-        navigator.share({title:n.title,url:du})
-          .catch(function(){showImgPreview(du,filename);});
-        return;
-      }
-    }catch(e){}
+  /* METHOD 2 — Blob URL + <a download> click
+     Works on desktop Chrome/Edge/Firefox and some Android browsers.
+     In Android WebView this also fires the DownloadListener
+     which routes to the system Download Manager app.             */
+  try{
+    var blobUrl=URL.createObjectURL(blob);
+    var a=document.createElement('a');
+    a.href=blobUrl;
+    a.download=filename;
+    a.type='image/png';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    /* Keep blob URL alive briefly so download can start */
+    setTimeout(function(){
+      try{URL.revokeObjectURL(blobUrl);}catch(e){}
+    },8000);
+    toast('\u2705 Opening download...','#059669');
+    return;
+  }catch(e){}
 
-    /* METHOD 3: Desktop Blob download */
+  /* METHOD 3 — window.open with Blob URL
+     WebView passes unhandled URLs to the Android system.
+     If a Download Manager app is installed it catches it;
+     if not, it opens in the default browser which downloads it. */
+  try{
+    var blobUrl2=URL.createObjectURL(blob);
+    window.open(blobUrl2,'_blank');
+    setTimeout(function(){try{URL.revokeObjectURL(blobUrl2);}catch(e){}},8000);
+    toast('\u2705 Opening in download manager...','#059669');
+    return;
+  }catch(e){}
+
+  /* METHOD 4 — window.open with data: URL
+     Redirects to browser which then offers to download/save the image. */
+  if(dataUrl){
     try{
-      var blobUrl=URL.createObjectURL(blob);
-      var a=document.createElement('a');
-      a.href=blobUrl;a.download=filename;
-      document.body.appendChild(a);a.click();
-      setTimeout(function(){URL.revokeObjectURL(blobUrl);document.body.removeChild(a);},2000);
-      toast('\u2705 Image downloaded!','#059669');
+      window.open(dataUrl,'_blank');
+      toast('\u2705 Opening in browser to save...','#059669');
       return;
     }catch(e){}
+  }
 
-    /* METHOD 4: Final fallback — show image, user long-presses */
-    showImgPreview(cv.toDataURL('image/png'),filename);
-  },'image/png');
+  /* METHOD 5 — Last resort: fullscreen preview, user long-presses image */
+  if(dataUrl) showImgPreview(dataUrl,filename);
+  else toast('\u274c Download failed. Please try again.','#dc2626');
 }
 
 function showImgPreview(dataUrl,filename){
@@ -616,7 +627,7 @@ function showImgPreview(dataUrl,filename){
     +'<div style="background:rgba(251,191,36,.18);border:1px solid rgba(251,191,36,.45);'
     +'border-radius:12px;padding:12px 14px;margin-bottom:12px;color:#fcd34d;'
     +'font-size:13px;font-weight:600;line-height:1.65;">'
-    +'\ud83d\udccc Press &amp; hold the image,<br>then tap <b>\"Save Image\"</b></div>'
+    +'\ud83d\udccc Press &amp; hold the image below,<br>then tap <b>"Save Image"</b> to save it.</div>'
     +'<img src="'+dataUrl+'" style="width:100%;border-radius:6px;'
     +'box-shadow:0 4px 20px rgba(0,0,0,.55);display:block;"/>'
     +'</div>';
